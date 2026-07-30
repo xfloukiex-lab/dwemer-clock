@@ -12,6 +12,7 @@ const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
 const tier = detectTier();
 const eng = createEngine({ canvas: $('#scene'), tier });
+document.body.dataset.tier = tier;   // visible in devtools when diagnosing a slow device
 const C = createClock(eng.scene);
 const M = createMovement(eng.scene, 6.15, tier);
 const CH = createChamber(eng.scene, -34);
@@ -62,15 +63,29 @@ addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 
-// Touch: drag up to go deeper.
+// Drag up to go deeper. Pointer events cover touch, pen AND a mouse drag in one
+// path — listening only for `touch` events left pen and mouse-drag doing nothing.
+let dragY = null;
+addEventListener('pointerdown', (e) => { dragY = e.clientY; });
+addEventListener('pointermove', (e) => {
+  if (dragY === null) return;
+  advance((dragY - e.clientY) * WHEEL * 2.4);
+  dragY = e.clientY;
+});
+for (const end of ['pointerup', 'pointercancel', 'pointerleave']) {
+  addEventListener(end, () => { dragY = null; });
+}
+
+// Touch as well, so a phone that delivers touch events without pointer events
+// still works, and so pull-to-refresh can be cancelled (needs non-passive).
 let touchY = null;
 addEventListener('touchstart', (e) => { touchY = e.touches[0].clientY; }, { passive: true });
 addEventListener('touchmove', (e) => {
   if (touchY === null) return;
   const y = e.touches[0].clientY;
-  advance((touchY - y) * WHEEL * 2.4);
+  // Only advance if pointer events are NOT already handling this drag.
+  if (dragY === null) advance((touchY - y) * WHEEL * 2.4);
   touchY = y;
-  // Non-passive so this can stop pull-to-refresh and rubber-banding on phones.
   e.preventDefault();
 }, { passive: false });
 addEventListener('touchend', () => { touchY = null; });
