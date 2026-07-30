@@ -3,8 +3,8 @@ import { wheelGeometry } from './parts.js';
 
 // What the tunnel opens into: a Dwemer city.
 //
-// First attempt at this was stacked boxes with dome hats, and Flouk called it
-// exactly right — "all basic shapes". Box + sphere is not Dwarven architecture.
+// The first attempt was stacked boxes with dome hats. Box + sphere is not
+// Dwarven architecture — it is a placeholder wearing the name.
 // What actually reads as Dwemer, in silhouette, from a long way off:
 //
 //   · TIERED towers — plinth, corbelled setbacks, a cornice — never a plain box

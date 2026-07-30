@@ -7,7 +7,7 @@ import * as THREE from 'three';
 // the movement inside. On a wide screen that never showed, because the clock
 // overfills the corners and hides everything. On a phone the clock only fits the
 // WIDTH, so the gear trains were plainly visible floating above and below the
-// dial (Flouk, 2026-07-30: "i can see the gears behind the door clock").
+// dial — reported from a real phone, 2026-07-30.
 //
 // A door in a void has nothing to be a door in. This is a plate with a bore the
 // clock sits in: it seals every aspect ratio, and when the face sinks you are
