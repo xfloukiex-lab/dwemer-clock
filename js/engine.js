@@ -85,7 +85,13 @@ export function createEngine({ canvas, tier = 'high' }) {
     // half-diagonal equals the door's radius, then come in a little closer.
     const DOOR_R = 6.1;
     const halfH = Math.tan((camera.fov * Math.PI) / 180 / 2);
-    baseZ = (DOOR_R * 0.93) / (halfH * Math.hypot(1, camera.aspect));
+    baseZ = camera.aspect >= 1
+      // Landscape: solve for the visible half-DIAGONAL so the face overfills the
+      // corners and the bezel runs off the top and bottom.
+      ? (DOOR_R * 0.93) / (halfH * Math.hypot(1, camera.aspect))
+      // Portrait: a circle cannot overfill a tall narrow screen without zooming
+      // in absurdly, so fit the WIDTH and let the case show above and below.
+      : (DOOR_R * 1.04) / (halfH * camera.aspect);
     camera.position.z = baseZ;
     camera.updateProjectionMatrix();
   }
