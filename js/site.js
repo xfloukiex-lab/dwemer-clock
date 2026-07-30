@@ -181,6 +181,13 @@ eng.onFrame((dt, t) => {
   eng.camera.position.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, camZ);
   eng.camera.lookAt(0, 0, camZ - 6);
 
+  // Thin at the face (which on a phone is viewed from a long way back), thick
+  // down the barrel where it gives depth, gone in the open chamber.
+  if (eng.scene.fog) {
+    const inTunnel = 0.012 * (1 - through) + 0.055 * through;
+    eng.scene.fog.density = inTunnel * (1 - out) + 0.0035 * out;
+  }
+
   M.update(dt, t, camZ);
   CH.update(dt, t, seg(p, 0.93, 1));
   C.setBolts(seg(p, LOCK_AT, OPEN_FROM + 0.03));

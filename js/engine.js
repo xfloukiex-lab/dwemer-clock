@@ -24,7 +24,7 @@ export function createEngine({ canvas, tier = 'high' }) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x07060a);
-  scene.fog = new THREE.FogExp2(0x07060a, 0.055);
+  scene.fog = new THREE.FogExp2(0x07060a, 0.012);   // site.js drives this per frame
 
   // Bronze needs something to reflect or it renders as flat dark metal. This
   // environment is generated in code — no HDRI file to ship or license.
@@ -91,7 +91,7 @@ export function createEngine({ canvas, tier = 'high' }) {
       ? (DOOR_R * 0.93) / (halfH * Math.hypot(1, camera.aspect))
       // Portrait: a circle cannot overfill a tall narrow screen without zooming
       // in absurdly, so fit the WIDTH and let the case show above and below.
-      : (DOOR_R * 1.04) / (halfH * camera.aspect);
+      : (DOOR_R * 1.02) / (halfH * camera.aspect);
     camera.position.z = baseZ;
     camera.updateProjectionMatrix();
   }

@@ -92,13 +92,9 @@ export function createChamber(scene, mouth = -34) {
 
   group.visible = false;
 
-  // The tunnel's fog is dense enough to hide a hand in front of your face; at
-  // chamber scale that turns everything black. Thin it out as the space opens.
-  const FOG_TUNNEL = scene.fog ? scene.fog.density : 0.055;
-
-  // `open` runs 0→1 as the camera clears the mouth of the tunnel.
+  // `open` runs 0→1 as the camera clears the mouth of the tunnel. Fog is owned
+  // by the timeline in site.js, not here.
   function update(dt, t, open) {
-    if (scene.fog) scene.fog.density = FOG_TUNNEL * (1 - open) + 0.0035 * open;
     group.visible = open > 0.001;
     if (!group.visible) return;
     sun.intensity = open * 9000;
