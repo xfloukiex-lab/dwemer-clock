@@ -1,0 +1,117 @@
+/* The Claw Door — the 3D fills the window and never scrolls. The document is
+   made tall by #track purely so the wheel has somewhere to go; scroll position
+   is read as a 0–1 timeline and everything else is derived from it. */
+
+:root {
+  --dark: #07060a;
+  --stone: #cdc5b4;
+  --dim: rgba(205, 197, 180, 0.58);
+  --gold: #e0a44a;
+  --edge: rgba(224, 164, 74, 0.26);
+  --display: 'Cinzel', Georgia, serif;
+  --text: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --gutter: clamp(18px, 3vw, 44px);
+}
+
+* { box-sizing: border-box; }
+
+/* Nothing scrolls: the wheel drives the timeline directly, so the page is
+   exactly one viewport and there is no scrollbar to hide in the first place. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+
+body {
+  margin: 0;
+  background: var(--dark);
+  color: var(--stone);
+  font-family: var(--text);
+  line-height: 1.55;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Depth gauge, bottom right — the only remaining hint that there is more. */
+#progress {
+  position: fixed; right: var(--gutter); bottom: var(--gutter); z-index: 20;
+  width: 2px; height: 84px; background: rgba(255, 255, 255, 0.13);
+}
+#progress span {
+  position: absolute; inset: auto 0 0 0; transform-origin: bottom;
+  height: calc(var(--p, 0) * 100%); background: var(--gold);
+  box-shadow: 0 0 12px rgba(224, 164, 74, 0.7);
+}
+
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; }
+#boot {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  background: var(--dark); color: var(--dim);
+  font-family: var(--display); letter-spacing: 0.34em; text-transform: uppercase; font-size: 0.72rem;
+}
+
+.bar { position: fixed; top: 0; left: 0; z-index: 20; padding: var(--gutter); pointer-events: none; }
+.bar h1 {
+  margin: 0; font-family: var(--display); font-weight: 600;
+  font-size: clamp(1.25rem, 2.5vw, 1.95rem); letter-spacing: 0.14em; text-transform: uppercase;
+  text-shadow: 0 4px 30px #000;
+}
+.sub { text-shadow: 0 2px 20px #000; margin: 4px 0 0; font-size: 0.7rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--dim); }
+
+/* --- ring marks ----------------------------------------------------------- */
+#marks {
+  position: fixed; right: var(--gutter); top: 50%; transform: translateY(-50%);
+  z-index: 20; display: flex; flex-direction: column; gap: 12px;
+}
+#marks i {
+  display: block; width: 3px; height: 30px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background .5s, box-shadow .5s;
+}
+#marks i.on { background: var(--gold); box-shadow: 0 0 16px rgba(224, 164, 74, 0.75); }
+body.solved #marks { opacity: 0; transition: opacity .9s; }
+
+/* --- caption -------------------------------------------------------------- */
+#caption {
+  position: fixed; left: 50%; bottom: calc(var(--gutter) + 34px); transform: translateX(-50%);
+  z-index: 20; margin: 0; width: max-content; max-width: 90vw; text-align: center;
+  font-family: var(--display); font-size: clamp(0.95rem, 1.6vw, 1.25rem);
+  letter-spacing: 0.1em; text-shadow: 0 3px 26px #000;
+}
+body.solved #caption {
+  font-size: clamp(1.6rem, 4vw, 3rem); letter-spacing: 0.2em; text-transform: uppercase;
+  color: #ffd79a; text-shadow: 0 0 60px rgba(255, 170, 70, 0.7);
+  bottom: 50%; transform: translate(-50%, 50%);
+  transition: font-size 1.2s, letter-spacing 1.2s, bottom 1.2s, color 1.2s;
+}
+
+#hint {
+  position: fixed; left: 50%; bottom: var(--gutter); transform: translateX(-50%);
+  z-index: 20; margin: 0; font-size: 0.62rem; letter-spacing: 0.4em;
+  text-transform: uppercase; color: var(--dim);
+  transition: opacity .6s;
+}
+body.moved #hint { opacity: 0; }
+
+
+/* Once you are inside the movement the dial-side chrome gets out of the way. */
+#marks, #caption, .bar { transition: opacity .7s; }
+body.inside #marks { opacity: 0; }
+
+
+/* --- phones ---------------------------------------------------------------
+   The dial already reframes itself from the viewport aspect, so this is only
+   about the chrome not crowding a small screen. */
+@media (max-width: 640px) {
+  :root { --gutter: 14px; }
+  .bar h1 { font-size: 1rem; letter-spacing: 0.12em; }
+  .sub { font-size: 0.58rem; letter-spacing: 0.2em; }
+  #caption { font-size: 0.85rem; bottom: calc(var(--gutter) + 26px); max-width: 88vw; text-align: center; }
+  #hint { font-size: 0.52rem; letter-spacing: 0.28em; }
+  #marks i { height: 20px; width: 2px; }
+  #progress { height: 56px; }
+}
+
+/* Landscape phones are short — pull the chrome in tighter still. */
+@media (max-height: 460px) {
+  .bar { padding: 10px 14px; }
+  #caption { bottom: 34px; font-size: 0.8rem; }
+  #hint { display: none; }
+}

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>The Dwemer Clock — wind it open</title>
+<meta name="description" content="A bronze Dwemer clock-lock filling the screen: three dials for seconds, minutes and hours. Scroll and each winds round to twelve, the lock gives, and the face sinks to reveal the movement — real involute gears, phase-locked so the teeth actually mesh." />
+<meta name="theme-color" content="#07060a" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="The Dwemer Clock — wind it open" />
+<meta property="og:description" content="Wind all three dials to twelve and the machine opens." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Space+Grotesk:wght@400;500&display=swap" />
+<link rel="stylesheet" href="css/site.css" />
+
+<!-- Pinned version. Addon import paths track it. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+<div id="boot"><span>winding</span></div>
+
+<header class="bar">
+  <h1>The Dwemer Clock</h1>
+  <p class="sub">Seconds &middot; Minutes &middot; Hours</p>
+</header>
+
+<!-- One mark per dial, lit as that dial reaches twelve. -->
+<div id="marks" aria-hidden="true"></div>
+
+<p id="caption" role="status">Scroll to wind it.</p>
+<p id="hint">scroll to wind &middot; arrow keys spin the dials</p>
+
+<!-- A thin gauge of how deep you are, since there is no scrollbar any more. -->
+<div id="progress" aria-hidden="true"><span></span></div>
+
+<script type="module" src="js/site.js"></script>
+</body>
+</html>
