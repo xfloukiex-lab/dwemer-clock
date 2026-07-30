@@ -264,10 +264,10 @@ eng.onFrame((dt, t) => {
   C.setBolts(seg(p, LOCK_AT, OPEN_FROM + 0.03));
 
   document.body.classList.toggle('inside', through > 0.25);
-  document.body.classList.toggle('solved', out > 0.8);
+  // Nothing is captioned out here. The reveal is the thing; naming it on screen
+  // was mine to invent and it was not wanted.
   setCaption(
-    out > 0.62 ? 'The city.'
-      : out > 0.12 ? 'Out the other side&hellip;'
+    out > 0.05 ? ''
       : through > 0.55 ? 'The movement.'
       : o > 0 ? 'The mechanism gives&hellip;'
       : locked ? 'All three read twelve.'

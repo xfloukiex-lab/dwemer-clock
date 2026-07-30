@@ -3,19 +3,21 @@ import { wheelGeometry } from './parts.js';
 
 // What the tunnel opens into: a Dwemer city.
 //
-// The barrel is twenty units of dark bronze, so the reward has to be SCALE.
-// Before, it opened into a few big wheels and a sky — which stopped the journey
-// inside the machine instead of taking you out the other side of it (Flouk,
-// 2026-07-30: "it stops inside the clock, its supposed to go through the clock
-// and then show a detailed dwarven city").
+// First attempt at this was stacked boxes with dome hats, and Flouk called it
+// exactly right — "all basic shapes". Box + sphere is not Dwarven architecture.
+// What actually reads as Dwemer, in silhouette, from a long way off:
 //
-// So: you come out of the movement high over a cavern, banked towers on both
-// sides, aqueduct pipes and walkways crossing overhead, gears built into the
-// architecture, and a great clock tower on the axis at the far end — the same
-// machine you just flew through, city-sized.
+//   · TIERED towers — plinth, corbelled setbacks, a cornice — never a plain box
+//   · FACETED bodies, not smooth cylinders (low-segment lathes; the facets are
+//     the fluting)
+//   · pointed LANCET arches, tall and narrow, in rows
+//   · angular BUTTRESS spurs kicking out of the base
+//   · a faceted CAP with a finial spike on top
+//   · rivet bands on every seam, and gear rosettes set flat into the facades
+//   · colonnades lining the avenue
 //
-// Everything here is instanced and generated from a fixed seed: identical every
-// load, one draw call per KIND of thing, and it holds up on a phone.
+// All of it is generated from three lathe profiles and instanced, so the whole
+// skyline is a handful of draw calls and a phone can carry it.
 
 const GROUND = -30;
 
@@ -31,6 +33,38 @@ function rng(seed) {
   };
 }
 
+// Profiles in (radius, height), both normalised 0..1, so one geometry can be
+// scaled into any tower. The steps ARE the architecture: every ledge is a
+// corbel, every pinch is a setback.
+const PROFILES = [
+  // Broad, heavily tiered — the civic block.
+  [[0, 0], [1.3, 0], [1.3, 0.04], [1.14, 0.06], [1.14, 0.1], [1.0, 0.12],
+    [1.0, 0.4], [1.16, 0.42], [1.16, 0.47], [0.94, 0.49],
+    [0.94, 0.68], [1.08, 0.7], [1.08, 0.74], [0.82, 0.76],
+    [0.82, 0.84], [0.96, 0.86], [0.52, 0.95], [0.16, 0.985], [0.05, 1]],
+  // Slender shaft — the spires between them.
+  [[0, 0], [1.15, 0], [1.15, 0.035], [0.92, 0.055], [0.92, 0.5],
+    [1.04, 0.52], [1.04, 0.56], [0.78, 0.58], [0.78, 0.8],
+    [0.9, 0.82], [0.38, 0.94], [0.1, 0.99], [0.04, 1]],
+  // Squat, huge corbel, stepped crown — the machine halls.
+  [[0, 0], [1.35, 0], [1.35, 0.07], [1.2, 0.09], [1.2, 0.42],
+    [1.42, 0.45], [1.42, 0.52], [1.16, 0.54], [1.16, 0.66],
+    [1.26, 0.68], [1.26, 0.72], [0.86, 0.75], [0.86, 0.86],
+    [0.62, 0.9], [0.3, 0.97], [0.08, 1]],
+];
+
+// A lancet arch — the Dwemer window. Unit width, unit-ish height.
+function archShape() {
+  const s = new THREE.Shape();
+  s.moveTo(-0.5, 0);
+  s.lineTo(-0.5, 0.62);
+  s.quadraticCurveTo(-0.5, 1.12, 0, 1.4);
+  s.quadraticCurveTo(0.5, 1.12, 0.5, 0.62);
+  s.lineTo(0.5, 0);
+  s.closePath();
+  return s;
+}
+
 function skyTexture() {
   const c = document.createElement('canvas');
   c.width = 8;
@@ -41,12 +75,12 @@ function skyTexture() {
   // top-to-bottom puts nothing but mid-brown on screen — pack the range into
   // the band that is actually visible.
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#0a0806');      // cavern roof, lost in the dark
-  g.addColorStop(0.3, '#1d1409');
-  g.addColorStop(0.44, '#ffe9bd');   // the great vents, glowing above the city
-  g.addColorStop(0.52, '#d2914a');
-  g.addColorStop(0.6, '#5c3717');
-  g.addColorStop(0.72, '#150d07');
+  g.addColorStop(0, '#08070a');      // cavern roof, lost in the dark
+  g.addColorStop(0.3, '#1b1409');
+  g.addColorStop(0.44, '#ffeec4');   // the great vents, glowing above the city
+  g.addColorStop(0.52, '#cf8b45');
+  g.addColorStop(0.6, '#54321a');
+  g.addColorStop(0.72, '#130c07');
   g.addColorStop(1, '#07060a');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 8, 256);
@@ -57,15 +91,19 @@ function skyTexture() {
 
 export function createCity(scene, mouth = -34, tier = 'high') {
   const LIGHT = tier === 'low';
+  const SEG = LIGHT ? 8 : 10;   // low segment count IS the faceting
   const group = new THREE.Group();
   scene.add(group);
 
   const rand = rng(0x0d3e3e);
   const M = {
-    stone: new THREE.MeshStandardMaterial({ color: 0x7a6038, metalness: 0.4, roughness: 0.8, envMapIntensity: 0.45 }),
-    bronze: new THREE.MeshStandardMaterial({ color: 0xb58a42, metalness: 0.95, roughness: 0.4, envMapIntensity: 0.8 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x2b2116, metalness: 0.6, roughness: 0.8, envMapIntensity: 0.25 }),
-    lamp: new THREE.MeshBasicMaterial({ color: 0xffb457, toneMapped: false, fog: true, transparent: true }),
+    brass: new THREE.MeshStandardMaterial({ color: 0xa8802f, metalness: 0.92, roughness: 0.44, envMapIntensity: 0.75 }),
+    bronze: new THREE.MeshStandardMaterial({ color: 0xc09144, metalness: 0.95, roughness: 0.36, envMapIntensity: 0.9 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x2a2015, metalness: 0.7, roughness: 0.75, envMapIntensity: 0.3 }),
+    // Terraces and floor are CUT STONE, not metal — left metallic they caught the
+    // key light and blew out to flat cream slabs.
+    stone: new THREE.MeshStandardMaterial({ color: 0x37291a, metalness: 0.05, roughness: 0.96, envMapIntensity: 0.2 }),
+    lamp: new THREE.MeshBasicMaterial({ color: 0xffb457, toneMapped: false, fog: true, transparent: true, side: THREE.DoubleSide }),
   };
 
   // --- the cavern -----------------------------------------------------------
@@ -76,21 +114,16 @@ export function createCity(scene, mouth = -34, tier = 'high') {
   shell.position.z = mouth - 200;
   group.add(shell);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), M.dark);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), M.stone);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, GROUND, mouth - 200);
   group.add(floor);
 
-  // Light: a hemisphere for the cavern glow plus one hard key from up ahead, so
-  // every tower reads as a silhouette against the vents. Point lights at this
-  // scale cost far more than they buy.
+  // A directional light travels FROM its position TOWARDS its target, so the key
+  // has to sit BEHIND the camera or it lights the far side of everything and
+  // leaves every visible face black. The far light is a rim, and only a rim.
   const hemi = new THREE.HemisphereLight(0xffce8e, 0x120a04, 0);
   group.add(hemi);
-  // A directional light travels from its position TOWARDS its target, so one
-  // placed at the far end of the cavern lights the far side of everything and
-  // leaves every face you can actually see in the dark — which is exactly what
-  // it did on the first render. The key belongs BEHIND the camera; the rim from
-  // the far vents is the second light, and only the second.
   const key = new THREE.DirectionalLight(0xffd2a0, 0);
   key.position.set(-52, 78, mouth + 90);
   group.add(key);
@@ -98,45 +131,60 @@ export function createCity(scene, mouth = -34, tier = 'high') {
   rim.position.set(46, 40, mouth - 300);
   group.add(rim);
 
-  // --- generate the skyline -------------------------------------------------
-  const blocks = [];   // stacked stone/bronze masses
-  const domes = [];
-  const lamps = [];    // amber windows — emissive quads, not lights
-  const pipes = [];    // aqueducts, walkways, spans
+  // --- lay out the skyline --------------------------------------------------
+  const towers = [[], [], []];   // one bucket per profile
+  const finials = [];
+  const spurs = [];              // buttress kicks at the base
+  const rivets = [];
+  const windows = [];
+  const rosettes = [];
 
-  function tower(cx, cz, baseW, height) {
-    let y = GROUND;
-    let w = baseW;
-    let bronzeTop = false;
-    while (y < GROUND + height) {
-      const h = 5 + rand() * 9;
-      blocks.push({ x: cx, y: y + h / 2, z: cz, w, h, d: w, bronze: bronzeTop });
-      // Amber windows on the face that looks BACK at the camera. Putting them on
-      // the corridor-facing side sounded right and rendered nothing: you fly
-      // straight down the corridor, so those planes are edge-on the whole way
-      // and the city had no lit glass in it at all.
-      const rowN = Math.max(1, Math.round(h / 3));
-      for (let i = 0; i < rowN; i++) {
-        if (rand() < 0.4) continue;
-        lamps.push({
-          x: cx + (rand() - 0.5) * w * 0.7,
-          y: y + 1.5 + i * (h / rowN),
-          z: cz + w / 2 + 0.05,
-          s: 0.6 + rand() * 0.9,
-          face: 0,
+  function tower(cx, cz, R, H, kind) {
+    towers[kind].push({ x: cx, z: cz, R, H });
+    finials.push({ x: cx, z: cz, y: GROUND + H, r: R * 0.09, h: R * 0.9 });
+
+    // Buttress spurs — four kicks out of the plinth. This is the single biggest
+    // "not a box" tell in the silhouette.
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i / 4) * Math.PI * 2;
+      spurs.push({
+        x: cx + Math.cos(a) * R * 1.08, z: cz + Math.sin(a) * R * 1.08, a,
+        w: R * 0.36, h: H * 0.34, d: R * 0.7,
+      });
+    }
+
+    // Rivet bands on the seams.
+    const bands = [0.06, 0.42, 0.7];
+    for (const b of bands) {
+      const n = Math.max(8, Math.round(R * 2.6));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        rivets.push({
+          x: cx + Math.cos(a) * R * 1.11, y: GROUND + H * b + H * 0.02,
+          z: cz + Math.sin(a) * R * 1.11, s: R * 0.05,
         });
       }
-      y += h;
-      w *= 0.78 + rand() * 0.14;
-      bronzeTop = bronzeTop || rand() < 0.3;
     }
-    domes.push({ x: cx, y, z: cz, r: w * 0.66 });
-    // A collar of pipe running off the top into the dark.
-    if (rand() < 0.5) {
-      pipes.push({
-        x: cx, y: y + 1, z: cz, len: 14 + rand() * 26, r: 0.5 + rand() * 0.5,
-        axis: 'x', dir: cx < 0 ? -1 : 1,
-      });
+
+    // Lancet windows, in rows, on the face that looks back at the camera.
+    // Putting them on the corridor-facing sides rendered nothing: you fly
+    // straight down the corridor, so those planes are edge-on the whole way.
+    const rowsN = Math.max(2, Math.round(H / 13));
+    for (let r = 0; r < rowsN; r++) {
+      const y = GROUND + H * (0.16 + r * (0.62 / rowsN));
+      const perRow = R > 8 ? 3 : 2;
+      for (let i = 0; i < perRow; i++) {
+        const off = (i - (perRow - 1) / 2) * (R * 0.62);
+        windows.push({
+          x: cx + off, y, z: cz + Math.sqrt(Math.max(0.2, R * R - off * off)) * 0.99,
+          w: R * 0.26, h: H * 0.055,
+        });
+      }
+    }
+
+    // A gear set flat into the facade, on some of them.
+    if (R > 7 && rand() < 0.55) {
+      rosettes.push({ x: cx, y: GROUND + H * 0.78, z: cz + R * 0.98, r: R * 0.5, sp: (rand() - 0.5) * 0.09 });
     }
   }
 
@@ -144,117 +192,165 @@ export function createCity(scene, mouth = -34, tier = 'high') {
   // itself (|x| < 22) is kept clear — that is what the camera flies down.
   const ROWS = LIGHT ? 8 : 13;
   for (let i = 0; i < ROWS; i++) {
-    const z = mouth - 45 - i * (LIGHT ? 38 : 24) - rand() * 8;
+    const z = mouth - 46 - i * (LIGHT ? 38 : 24) - rand() * 8;
     for (const side of [-1, 1]) {
-      const near = side * (24 + rand() * 16);
-      tower(near, z, 9 + rand() * 7, 26 + rand() * 34);
+      tower(side * (26 + rand() * 12), z, 5 + rand() * 4, 26 + rand() * 30, rand() < 0.45 ? 1 : 0);
       if (!LIGHT || i % 2 === 0) {
-        tower(side * (58 + rand() * 40), z - rand() * 20, 12 + rand() * 10, 34 + rand() * 46);
+        tower(side * (56 + rand() * 38), z - rand() * 20, 7 + rand() * 6, 34 + rand() * 46,
+          rand() < 0.35 ? 2 : (rand() < 0.5 ? 1 : 0));
       }
     }
   }
 
-  // Spans crossing the corridor — you fly UNDER these, which is most of the
-  // reason the city reads as big.
-  for (let i = 0; i < (LIGHT ? 4 : 8); i++) {
-    const z = mouth - 40 - i * (LIGHT ? 60 : 32);
-    pipes.push({ x: 0, y: 26 + rand() * 34, z, len: 150, r: 1.1 + rand() * 1.3, axis: 'x', dir: 1, span: true });
-    if (rand() < 0.6) {
-      pipes.push({ x: 0, y: GROUND + 6 + rand() * 6, z: z - 8, len: 130, r: 0.8, axis: 'x', dir: 1, span: true });
+  // --- the avenue -----------------------------------------------------------
+  // Terraces the towers stand on, and a colonnade down both sides. Bare floor
+  // under a skyline reads as models on a table.
+  const terraceMat = M.stone;
+  for (const side of [-1, 1]) {
+    for (let step = 0; step < 3; step++) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(14 + step * 10, 3 + step * 2.5, 420), terraceMat);
+      t.position.set(side * (22 + step * 11), GROUND + (3 + step * 2.5) / 2 - step * 0.4, mouth - 220);
+      group.add(t);
     }
   }
 
-  // The avenue: lamp standards down both sides of the corridor, running to the
-  // great tower. Without them the whole lower half of the shot is bare floor,
-  // and nothing leads the eye anywhere.
-  const posts = [];
-  for (let i = 0; i < (LIGHT ? 12 : 22); i++) {
-    const z = mouth - 34 - i * 22;
+  const columns = [];
+  const lintels = [];
+  for (let i = 0; i < (LIGHT ? 16 : 30); i++) {
+    const z = mouth - 40 - i * 11;
     for (const side of [-1, 1]) {
-      posts.push({ x: side * 15, z });
-      lamps.push({ x: side * 15, y: GROUND + 11.4, z: z + 0.3, s: 1.6, face: 0 });
+      columns.push({ x: side * 19, z });
+      windows.push({ x: side * 19, y: GROUND + 11.6, z: z + 0.9, w: 1.5, h: 1.6 });
     }
   }
+  for (let i = 0; i < (LIGHT ? 8 : 15); i++) {
+    const z = mouth - 45 - i * 22;
+    for (const side of [-1, 1]) lintels.push({ x: side * 19, z, len: 22 });
+  }
 
-  // --- push it all into instanced meshes ------------------------------------
+  // Aqueducts and walkways crossing the corridor — you fly UNDER these, which is
+  // most of the reason the city reads as big.
+  // Only in the NEAR half. A walkway far down the avenue sits at almost the same
+  // screen height as the great tower's dial and draws a bar straight across it;
+  // close in, perspective throws it well clear above your head.
+  const spans = [];
+  for (let i = 0; i < (LIGHT ? 4 : 6); i++) {
+    const z = mouth - 50 - i * 22;
+    spans.push({ y: 26 + rand() * 16, z, r: 0.55 + rand() * 0.3 });
+  }
+
+  // --- build the instanced meshes -------------------------------------------
   const dummy = new THREE.Object3D();
-
   function instance(geo, mat, n) {
-    const m = new THREE.InstancedMesh(geo, mat, n);
-    m.frustumCulled = false;   // one object, spread over the whole cavern
+    const m = new THREE.InstancedMesh(geo, mat, Math.max(1, n));
+    m.frustumCulled = false;
     group.add(m);
     return m;
   }
 
-  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-  const stoneBlocks = blocks.filter((b) => !b.bronze);
-  const bronzeBlocks = blocks.filter((b) => b.bronze);
-  for (const [set, mat] of [[stoneBlocks, M.stone], [bronzeBlocks, M.bronze]]) {
-    if (!set.length) continue;
-    const im = instance(boxGeo, mat, set.length);
-    set.forEach((b, i) => {
-      dummy.position.set(b.x, b.y, b.z);
-      dummy.scale.set(b.w, b.h, b.d);
-      dummy.rotation.set(0, 0, 0);
+  PROFILES.forEach((pts, k) => {
+    if (!towers[k].length) return;
+    const geo = new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), SEG);
+    const im = instance(geo, k === 2 ? M.brass : M.bronze, towers[k].length);
+    towers[k].forEach((t, i) => {
+      dummy.position.set(t.x, GROUND, t.z);
+      dummy.scale.set(t.R, t.H, t.R);
+      dummy.rotation.set(0, rand() * Math.PI, 0);
       dummy.updateMatrix();
       im.setMatrixAt(i, dummy.matrix);
     });
-  }
+  });
 
-  const domeIM = instance(
-    new THREE.SphereGeometry(1, LIGHT ? 10 : 16, LIGHT ? 6 : 10, 0, Math.PI * 2, 0, Math.PI / 2),
-    M.bronze, domes.length,
-  );
-  domes.forEach((d, i) => {
-    dummy.position.set(d.x, d.y, d.z);
-    dummy.scale.set(d.r, d.r * 0.8, d.r);
+  const finialIM = instance(new THREE.ConeGeometry(1, 1, 6), M.bronze, finials.length);
+  finials.forEach((f, i) => {
+    dummy.position.set(f.x, f.y + f.h / 2, f.z);
+    dummy.scale.set(f.r, f.h, f.r);
     dummy.rotation.set(0, 0, 0);
     dummy.updateMatrix();
-    domeIM.setMatrixAt(i, dummy.matrix);
+    finialIM.setMatrixAt(i, dummy.matrix);
   });
 
-  const lampIM = instance(new THREE.PlaneGeometry(1, 1), M.lamp, Math.max(1, lamps.length));
-  lamps.forEach((l, i) => {
-    dummy.position.set(l.x, l.y, l.z);
-    dummy.scale.set(l.s, l.s * 1.5, 1);
-    dummy.rotation.set(0, l.face * (Math.PI / 2), 0);
+  const spurIM = instance(new THREE.BoxGeometry(1, 1, 1), M.brass, spurs.length);
+  spurs.forEach((s, i) => {
+    dummy.position.set(s.x, GROUND + s.h / 2, s.z);
+    dummy.scale.set(s.w, s.h, s.d);
+    dummy.rotation.set(0, -s.a, 0);
     dummy.updateMatrix();
-    lampIM.setMatrixAt(i, dummy.matrix);
+    spurIM.setMatrixAt(i, dummy.matrix);
   });
 
-  const postIM = instance(new THREE.CylinderGeometry(0.4, 0.55, 11, 8), M.bronze, posts.length);
-  posts.forEach((s, i) => {
-    dummy.position.set(s.x, GROUND + 5.5, s.z);
+  const rivetIM = instance(new THREE.SphereGeometry(1, 6, 5), M.brass, rivets.length);
+  rivets.forEach((r, i) => {
+    dummy.position.set(r.x, r.y, r.z);
+    dummy.scale.set(r.s, r.s, r.s);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    rivetIM.setMatrixAt(i, dummy.matrix);
+  });
+
+  const winIM = instance(new THREE.ShapeGeometry(archShape(), 8), M.lamp, windows.length);
+  windows.forEach((w, i) => {
+    dummy.position.set(w.x, w.y, w.z);
+    dummy.scale.set(w.w, w.h, 1);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    winIM.setMatrixAt(i, dummy.matrix);
+  });
+
+  const colIM = instance(new THREE.CylinderGeometry(0.62, 0.78, 11, 8), M.bronze, columns.length);
+  columns.forEach((c, i) => {
+    dummy.position.set(c.x, GROUND + 5.5, c.z);
     dummy.scale.set(1, 1, 1);
     dummy.rotation.set(0, 0, 0);
     dummy.updateMatrix();
-    postIM.setMatrixAt(i, dummy.matrix);
+    colIM.setMatrixAt(i, dummy.matrix);
   });
 
-  const pipeIM = instance(new THREE.CylinderGeometry(1, 1, 1, LIGHT ? 6 : 10), M.bronze, pipes.length);
-  pipes.forEach((p, i) => {
-    dummy.position.set(p.span ? 0 : p.x + p.dir * p.len / 2, p.y, p.z);
-    dummy.scale.set(p.r, p.len, p.r);
-    dummy.rotation.set(0, 0, Math.PI / 2);   // lie it along X
+  const linIM = instance(new THREE.BoxGeometry(1, 1, 1), M.brass, lintels.length);
+  lintels.forEach((l, i) => {
+    dummy.position.set(l.x, GROUND + 11.9, l.z);
+    dummy.scale.set(2.6, 1.5, l.len);
+    dummy.rotation.set(0, 0, 0);
     dummy.updateMatrix();
-    pipeIM.setMatrixAt(i, dummy.matrix);
+    linIM.setMatrixAt(i, dummy.matrix);
   });
 
-  // --- gears built into the architecture ------------------------------------
-  // The city runs on the same machine you flew through. These are real wheels
-  // from parts.js, not decoration — same involute teeth.
+  // A bridge is a DECK with rails, not a pipe. Bare tubes crossing the avenue
+  // read as scaffolding.
+  const deckIM = instance(new THREE.BoxGeometry(150, 1.1, 6), M.brass, spans.length);
+  const railIM = instance(new THREE.CylinderGeometry(1, 1, 150, LIGHT ? 6 : 8), M.bronze, spans.length * 2);
+  spans.forEach((s, i) => {
+    dummy.position.set(0, s.y, s.z);
+    dummy.scale.set(1, 1, 1);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    deckIM.setMatrixAt(i, dummy.matrix);
+    for (const side of [0, 1]) {
+      dummy.position.set(0, s.y + 2.2, s.z + (side ? 2.6 : -2.6));
+      dummy.scale.set(s.r, 1, s.r);
+      dummy.rotation.set(0, 0, Math.PI / 2);
+      dummy.updateMatrix();
+      railIM.setMatrixAt(i * 2 + side, dummy.matrix);
+    }
+  });
+
+  // --- gears in the architecture --------------------------------------------
+  // Real wheels from parts.js — the city runs on the machine you flew through.
   const cityGears = [];
-  const GSPEC = LIGHT
-    ? [{ r: 16, N: 64, x: -34, y: 6, z: -58, sp: 0.05 }, { r: 22, N: 84, x: 40, y: 14, z: -96, sp: -0.035 }]
-    : [
-      { r: 16, N: 64, x: -34, y: 6, z: -58, sp: 0.05 },
-      { r: 22, N: 84, x: 40, y: 14, z: -96, sp: -0.035 },
-      { r: 11, N: 48, x: 27, y: -12, z: -46, sp: 0.08 },
-      { r: 30, N: 108, x: -58, y: 26, z: -150, sp: -0.022 },
-      { r: 13, N: 52, x: -24, y: 34, z: -120, sp: 0.045 },
-    ];
-  for (const s of GSPEC) {
-    const mesh = new THREE.Mesh(wheelGeometry(s.N, (s.r * 2) / s.N, s.r * 0.07, 6), M.bronze);
+  for (const r of rosettes.slice(0, LIGHT ? 4 : 10)) {
+    const N = Math.max(24, Math.round(r.r * 4));
+    const mesh = new THREE.Mesh(wheelGeometry(N, (r.r * 2) / N, r.r * 0.12, 6), M.brass);
+    mesh.position.set(r.x, r.y, r.z);
+    group.add(mesh);
+    cityGears.push({ mesh, sp: r.sp });
+  }
+  for (const s of (LIGHT
+    ? [{ r: 17, x: -40, y: 4, z: -70, sp: 0.045 }]
+    : [{ r: 17, x: -40, y: 4, z: -70, sp: 0.045 },
+      { r: 26, x: 48, y: 18, z: -118, sp: -0.03 },
+      { r: 12, x: 30, y: -14, z: -58, sp: 0.07 }])) {
+    const N = Math.round(s.r * 4);
+    const mesh = new THREE.Mesh(wheelGeometry(N, (s.r * 2) / N, s.r * 0.08, 7), M.bronze);
     mesh.position.set(s.x, s.y, mouth + s.z);
     group.add(mesh);
     cityGears.push({ mesh, sp: s.sp });
@@ -263,44 +359,63 @@ export function createCity(scene, mouth = -34, tier = 'high') {
   // --- the great clock tower, dead ahead ------------------------------------
   // The payoff: the thing you wound, city-sized, at the end of the avenue.
   const tower0 = new THREE.Group();
-  tower0.position.set(0, 0, mouth - 300);
+  tower0.position.set(0, GROUND, mouth - 300);
   group.add(tower0);
 
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(17, 23, 96, LIGHT ? 12 : 24), M.stone);
-  shaft.position.y = GROUND + 48;
-  tower0.add(shaft);
-  for (let i = 0; i < 4; i++) {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(18.5 - i * 1.1, 1.1, 6, LIGHT ? 16 : 32), M.bronze);
-    band.rotation.x = Math.PI / 2;
-    band.position.y = GROUND + 16 + i * 24;
-    tower0.add(band);
-  }
-  const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(18, LIGHT ? 12 : 22, LIGHT ? 8 : 14, 0, Math.PI * 2, 0, Math.PI / 2),
+  const H0 = 108;
+  const R0 = 21;
+  const body = new THREE.Mesh(
+    new THREE.LatheGeometry(PROFILES[0].map(([r, y]) => new THREE.Vector2(r * R0, y * H0)), LIGHT ? 10 : 14),
     M.bronze,
   );
-  cap.position.y = GROUND + 96;
-  tower0.add(cap);
+  tower0.add(body);
+  // Vertical fluting — worth the extra meshes on the one building you stare at.
+  for (let i = 0; i < (LIGHT ? 10 : 16); i++) {
+    const a = (i / (LIGHT ? 10 : 16)) * Math.PI * 2;
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(1.5, H0 * 0.36, 1.5), M.brass);
+    rib.position.set(Math.cos(a) * R0 * 1.02, H0 * 0.22, Math.sin(a) * R0 * 1.02);
+    rib.rotation.y = -a;
+    tower0.add(rib);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i / 4) * Math.PI * 2;
+    // Kept small and low: at 0.4R × 0.3H they read as flat slabs pasted on the
+    // shaft, not buttresses.
+    const spur = new THREE.Mesh(new THREE.BoxGeometry(R0 * 0.2, H0 * 0.14, R0 * 0.5), M.brass);
+    spur.position.set(Math.cos(a) * R0 * 1.15, H0 * 0.07, Math.sin(a) * R0 * 1.15);
+    spur.rotation.y = -a;
+    tower0.add(spur);
+  }
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(2.4, 22, 6), M.bronze);
+  spire.position.y = H0 + 11;
+  tower0.add(spire);
 
-  const faceY = GROUND + 62;
-  const dial = new THREE.Mesh(new THREE.CircleGeometry(13, 48), M.dark);
-  dial.position.set(0, faceY, 23.4);
+  const faceY = H0 * 0.6;
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(12.5, 48), M.dark);
+  dial.position.set(0, faceY, R0 * 1.02);
   tower0.add(dial);
-  const bezel = new THREE.Mesh(new THREE.TorusGeometry(13.4, 1.3, 8, 48), M.bronze);
-  bezel.position.set(0, faceY, 23.4);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(12.9, 1.25, 8, 48), M.bronze);
+  bezel.position.copy(dial.position);
   tower0.add(bezel);
   const glow = new THREE.Mesh(
-    new THREE.CircleGeometry(12.2, 48),
-    new THREE.MeshBasicMaterial({ color: 0xffb457, toneMapped: false, transparent: true, opacity: 0.5 }),
+    new THREE.CircleGeometry(11.8, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffb457, toneMapped: false, transparent: true, opacity: 0.45 }),
   );
-  glow.position.set(0, faceY, 23.2);
+  glow.position.set(0, faceY, R0 * 1.0);
   tower0.add(glow);
-  // Two hands, turning — the city keeps time.
+  // Twelve marks, so it reads as a dial and not a porthole.
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.8, i % 3 === 0 ? 2.4 : 1.4, 0.4), M.bronze);
+    m.position.set(Math.cos(a) * 10.6, faceY + Math.sin(a) * 10.6, R0 * 1.06);
+    m.rotation.z = a - Math.PI / 2;
+    tower0.add(m);
+  }
   const hands = [];
-  for (const [len, w] of [[10.5, 0.7], [7.2, 1.0]]) {
-    const h = new THREE.Mesh(new THREE.BoxGeometry(w, len, 0.6), M.bronze);
+  for (const [len, w] of [[10, 0.75], [6.8, 1.1]]) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(w, len, 0.6), M.brass);
     h.geometry.translate(0, len / 2, 0);
-    h.position.set(0, faceY, 24.0);
+    h.position.set(0, faceY, R0 * 1.09);
     tower0.add(h);
     hands.push(h);
   }
@@ -332,9 +447,9 @@ export function createCity(scene, mouth = -34, tier = 'high') {
     hemi.intensity = open * 3.1;
     key.intensity = open * 2.9;
     rim.intensity = open * 1.8;
-    lampIM.material.opacity = open;
+    M.lamp.opacity = open;
     motes.material.opacity = open * 0.5;
-    glow.material.opacity = open * 0.5;
+    glow.material.opacity = open * 0.45;
     for (const g of cityGears) g.mesh.rotation.z = t * g.sp;
     hands[0].rotation.z = -t * 0.09;
     hands[1].rotation.z = -t * 0.011;
