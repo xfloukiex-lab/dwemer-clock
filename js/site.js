@@ -3,6 +3,7 @@ import { createEngine, detectTier } from './engine.js';
 import { createClock } from './clock.js';
 import { createMovement } from './movement.js';
 import { createChamber } from './wonderland.js';
+import { createWall } from './wall.js';
 
 const $ = (s) => document.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -16,6 +17,18 @@ document.body.dataset.tier = tier;   // visible in devtools when diagnosing a sl
 const C = createClock(eng.scene);
 const M = createMovement(eng.scene, 6.15, tier);
 const CH = createChamber(eng.scene, -34);
+// The clock is set into a wall. Without it the barrel (BackSide, so invisible
+// from outside) leaves the movement showing around the dial on any screen the
+// clock does not overfill — which is every phone in portrait.
+createWall(eng.scene, 6.02);
+
+const touchOnly = matchMedia('(pointer: coarse)').matches;
+if (touchOnly) {
+  const hint = $('#hint');
+  if (hint) hint.textContent = 'swipe up to wind · tap to step';
+  const cap = $('#caption');
+  if (cap) cap.textContent = 'Swipe up to wind it.';
+}
 
 // --- winding the lock -------------------------------------------------------
 // The dials start showing the real time, then each one winds round to twelve in
@@ -52,6 +65,12 @@ let p = 0;
 const WHEEL = 1 / 4200;   // one full pass ≈ 4200px of wheel travel
 const bar = $('#progress');
 
+// A drag is measured against the SCREEN, not against a pixel constant. On a
+// phone a fixed px-per-progress rate means the whole sequence takes several
+// deliberate full-height swipes, which reads as "nothing is happening".
+// One full pass ≈ 1.5 screen-heights of dragging, wherever you are.
+const dragGain = () => 1 / (innerHeight * 1.5);
+
 function advance(delta) {
   raw = clamp01(raw + delta);
   if (raw > 0.005) document.body.classList.add('moved');
@@ -63,32 +82,65 @@ addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 
-// Drag up to go deeper. Pointer events cover touch, pen AND a mouse drag in one
-// path — listening only for `touch` events left pen and mouse-drag doing nothing.
-let dragY = null;
-addEventListener('pointerdown', (e) => { dragY = e.clientY; });
-addEventListener('pointermove', (e) => {
-  if (dragY === null) return;
-  advance((dragY - e.clientY) * WHEEL * 2.4);
-  dragY = e.clientY;
-});
-for (const end of ['pointerup', 'pointercancel', 'pointerleave']) {
-  addEventListener(end, () => { dragY = null; });
+// --- dragging ---------------------------------------------------------------
+// Pointer events cover touch, pen AND mouse-drag in one path; the touch
+// listeners below are the fallback for anything that ships touch without
+// pointer events. `claimed` is what stops the two paths double-counting.
+//
+// A flick carries on after the finger leaves the glass. Without that, a quick
+// swipe moves the timeline a couple of hundred pixels and stops dead — the
+// gesture everyone actually makes on a phone did the least.
+let vel = 0;          // progress per second, decayed each frame
+let claimed = false;  // a pointer drag is in progress; touch handlers stand down
+
+function makeDrag() {
+  let y = null;
+  let moved = 0;
+  let t0 = 0;
+  return {
+    start(clientY) { y = clientY; moved = 0; t0 = performance.now(); vel = 0; },
+    move(clientY) {
+      if (y === null) return;
+      const dy = y - clientY;
+      moved += Math.abs(dy);
+      const d = dy * dragGain();
+      advance(d);
+      const dt = Math.max(16, performance.now() - t0) / 1000;
+      vel = d / dt;
+      t0 = performance.now();
+      y = clientY;
+    },
+    end() {
+      const wasTap = y !== null && moved < 12;
+      y = null;
+      // A tap always does something. If a device ever eats drag events, the page
+      // is still usable — the one failure mode worth engineering out.
+      if (wasTap) { vel = 0; advance(0.075); }
+    },
+    get active() { return y !== null; },
+  };
 }
 
-// Touch as well, so a phone that delivers touch events without pointer events
-// still works, and so pull-to-refresh can be cancelled (needs non-passive).
-let touchY = null;
-addEventListener('touchstart', (e) => { touchY = e.touches[0].clientY; }, { passive: true });
+const pointerDrag = makeDrag();
+const touchDrag = makeDrag();
+
+addEventListener('pointerdown', (e) => { claimed = true; pointerDrag.start(e.clientY); });
+addEventListener('pointermove', (e) => pointerDrag.move(e.clientY));
+for (const end of ['pointerup', 'pointercancel', 'pointerleave']) {
+  addEventListener(end, () => { pointerDrag.end(); claimed = false; });
+}
+
+// Non-passive so pull-to-refresh and overscroll can be cancelled.
+addEventListener('touchstart', (e) => {
+  if (!claimed) touchDrag.start(e.touches[0].clientY);
+}, { passive: false });
 addEventListener('touchmove', (e) => {
-  if (touchY === null) return;
-  const y = e.touches[0].clientY;
-  // Only advance if pointer events are NOT already handling this drag.
-  if (dragY === null) advance((touchY - y) * WHEEL * 2.4);
-  touchY = y;
+  if (!claimed) touchDrag.move(e.touches[0].clientY);
   e.preventDefault();
 }, { passive: false });
-addEventListener('touchend', () => { touchY = null; });
+for (const end of ['touchend', 'touchcancel']) {
+  addEventListener(end, () => { if (!claimed) touchDrag.end(); }, { passive: true });
+}
 
 // Keyboard, for anyone not using a wheel. Arrows are reserved for the dials.
 addEventListener('keydown', (e) => {
@@ -145,6 +197,13 @@ function dialInput() {
 
 // --- frame ------------------------------------------------------------------
 eng.onFrame((dt, t) => {
+  // Carry a flick after the finger lifts, then let it die out.
+  if (vel !== 0 && !pointerDrag.active && !touchDrag.active) {
+    advance(vel * dt);
+    vel *= Math.pow(0.0022, dt);
+    if (Math.abs(vel) < 0.004) vel = 0;
+  }
+
   p += (raw - p) * Math.min(1, dt * (reduced ? 60 : 3.2));
 
   const input = dialInput();
@@ -198,7 +257,10 @@ eng.onFrame((dt, t) => {
       : through > 0.55 ? 'The movement.'
       : o > 0 ? 'The mechanism gives&hellip;'
       : locked ? 'All three read twelve.'
-      : STAGES.filter((s) => p >= s.from).pop()?.caption || 'Scroll to wind it.',
+      // The page told a phone to SCROLL, on a page where scrolling is switched
+      // off by design. Say what the device in your hand can actually do.
+      : STAGES.filter((s) => p >= s.from).pop()?.caption
+        || (touchOnly ? 'Swipe up to wind it.' : 'Scroll to wind it.'),
   );
 });
 
