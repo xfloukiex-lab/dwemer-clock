@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createEngine, detectTier } from './engine.js';
 import { createClock } from './clock.js';
 import { createMovement } from './movement.js';
-import { createChamber } from './wonderland.js';
+import { createCity } from './wonderland.js';
 import { createWall } from './wall.js';
 
 const $ = (s) => document.querySelector(s);
@@ -16,7 +16,7 @@ const eng = createEngine({ canvas: $('#scene'), tier });
 document.body.dataset.tier = tier;   // visible in devtools when diagnosing a slow device
 const C = createClock(eng.scene);
 const M = createMovement(eng.scene, 6.15, tier);
-const CH = createChamber(eng.scene, -34);
+const CH = createCity(eng.scene, -34, tier);
 // The clock is set into a wall. Without it the barrel (BackSide, so invisible
 // from outside) leaves the movement showing around the dial on any screen the
 // clock does not overfill — which is every phone in portrait.
@@ -50,8 +50,13 @@ const LOCK_AT = 0.79;
 const OPEN_FROM = 0.81;
 const OPEN_TO = 0.92;
 const THROUGH_FROM = 0.86;
-const TUNNEL_END = -33;   // the mouth of the chamber
-const CHAMBER_END = -44;  // just clear of the mouth, looking out into it
+const TUNNEL_END = -35;   // the mouth — the far end of the movement
+// You go THROUGH the clock and out over the city. Stopping just clear of the
+// mouth left the whole journey inside the machine.
+// Stop where the city is still AHEAD of you. Flying deep into it puts most of
+// it behind the camera and you end up staring at the floor.
+const CITY_END = -96;
+const CITY_RISE = 17;     // and you come out above it, not level with the floor
 
 const marks = [0, 1, 2].map(() => $('#marks').appendChild(document.createElement('i')));
 
@@ -230,30 +235,39 @@ eng.onFrame((dt, t) => {
   const e = o * o * (3 - 2 * o);
   C.face.position.y = -e * 15;
 
-  // Down the tunnel first, then out into the chamber.
-  const through = seg(p, THROUGH_FROM, 0.96);
+  // Down the tunnel, out of the mouth, and on over the city.
+  const through = seg(p, THROUGH_FROM, 0.9);
   const te = through * through;
-  const out = seg(p, 0.955, 1);
-  const camZ = eng.baseZ() * (1 - te) + TUNNEL_END * te + (CHAMBER_END - TUNNEL_END) * out * out;
+  const out = seg(p, 0.9, 1);
+  const oe = out * out * (3 - 2 * out);
+  const camZ = eng.baseZ() * (1 - te) + TUNNEL_END * te + (CITY_END - TUNNEL_END) * oe;
+  const camY = oe * CITY_RISE;
 
   const shake = reduced ? 0 : Math.sin(e * Math.PI) * 0.1;
-  eng.camera.position.set((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake, camZ);
-  eng.camera.lookAt(0, 0, camZ - 6);
+  eng.camera.position.set((Math.random() - 0.5) * shake, camY + (Math.random() - 0.5) * shake, camZ);
+  // Level in the barrel, then a SLIGHT tip down over the city — enough to put
+  // the avenue in frame, not so much that the great tower's clock face is
+  // cropped off the top (16° of pitch did exactly that).
+  eng.camera.lookAt(0, camY - oe * 3.5, camZ - 34);
 
   // Thin at the face (which on a phone is viewed from a long way back), thick
   // down the barrel where it gives depth, gone in the open chamber.
   if (eng.scene.fog) {
     const inTunnel = 0.012 * (1 - through) + 0.055 * through;
-    eng.scene.fog.density = inTunnel * (1 - out) + 0.0035 * out;
+    // Out in the cavern the haze is what gives the far towers their distance —
+    // thin enough to see the great tower, thick enough that it stays far away.
+    eng.scene.fog.density = inTunnel * (1 - oe) + 0.0052 * oe;
   }
 
   M.update(dt, t, camZ);
-  CH.update(dt, t, seg(p, 0.93, 1));
+  CH.update(dt, t, seg(p, 0.895, 0.985));
   C.setBolts(seg(p, LOCK_AT, OPEN_FROM + 0.03));
 
   document.body.classList.toggle('inside', through > 0.25);
+  document.body.classList.toggle('solved', out > 0.8);
   setCaption(
-    out > 0.25 ? 'It opens.'
+    out > 0.62 ? 'The city.'
+      : out > 0.12 ? 'Out the other side&hellip;'
       : through > 0.55 ? 'The movement.'
       : o > 0 ? 'The mechanism gives&hellip;'
       : locked ? 'All three read twelve.'
